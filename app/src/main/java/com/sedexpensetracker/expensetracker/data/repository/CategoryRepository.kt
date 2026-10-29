@@ -14,7 +14,7 @@ class CategoryRepository {
     private val auth: FirebaseAuth get() = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore get() = FirebaseFirestore.getInstance()
 
-    private val localCategories = getFreshDefaultCategories().toMutableList()
+    private val localCategories = getFreshDefaultCategories().distinctBy { "${it.type.uppercase()}_${it.name.trim().uppercase()}" }.toMutableList()
     private val _localCategoriesFlow = MutableStateFlow<List<CategoryModel>>(localCategories.toList())
 
     val allCategories: Flow<List<CategoryModel>> = callbackFlow {
@@ -35,9 +35,11 @@ class CategoryRepository {
                                 seedDefaultCategories(uid)
                                 trySend(getFreshDefaultCategories())
                             } else {
-                                list.sortBy { it.name }
+                                // Deduplicate categories by type and name
+                                val uniqueList = list.distinctBy { "${it.type.uppercase()}_${it.name.trim().uppercase()}" }.toMutableList()
+                                uniqueList.sortBy { it.name }
                                 localCategories.clear()
-                                localCategories.addAll(list)
+                                localCategories.addAll(uniqueList)
                                 _localCategoriesFlow.value = localCategories.toList()
                                 trySend(localCategories.toList())
                             }
@@ -73,9 +75,8 @@ class CategoryRepository {
     private fun seedDefaultCategories(uid: String) {
         val batch = firestore.batch()
         for (category in getFreshDefaultCategories()) {
-            val docRef = firestore.collection("users").document(uid).collection("categories").document()
-            val newCat = category.copy(id = docRef.id)
-            batch.set(docRef, newCat)
+            val docRef = firestore.collection("users").document(uid).collection("categories").document(category.id)
+            batch.set(docRef, category)
         }
         batch.commit()
     }
@@ -87,9 +88,13 @@ class CategoryRepository {
             category.id = firestore.collection("users").document().id
         }
 
-        val index = localCategories.indexOfFirst { it.id == category.id }
-        if (index >= 0) {
-            localCategories[index] = category
+        // Check if a category with same type and name already exists
+        val existingIndex = localCategories.indexOfFirst {
+            it.id == category.id || (it.type.equals(category.type, ignoreCase = true) && it.name.trim().equals(category.name.trim(), ignoreCase = true))
+        }
+
+        if (existingIndex >= 0) {
+            localCategories[existingIndex] = category
         } else {
             localCategories.add(category)
         }

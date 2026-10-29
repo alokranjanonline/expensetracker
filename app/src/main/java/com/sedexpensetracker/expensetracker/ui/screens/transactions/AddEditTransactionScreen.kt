@@ -13,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.sedexpensetracker.expensetracker.ui.components.CategoryIconHelper
 import com.sedexpensetracker.expensetracker.utilities.CurrencyFormatter
 import com.sedexpensetracker.expensetracker.viewmodel.AddEditTransactionViewModel
+import com.sedexpensetracker.expensetracker.viewmodel.FocusTarget
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,11 +38,24 @@ fun AddEditTransactionScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    val amountFocusRequester = remember { FocusRequester() }
+    val titleFocusRequester = remember { FocusRequester() }
+
     LaunchedEffect(transactionId) {
         if (!transactionId.isNullOrBlank()) {
             viewModel.loadExistingTransaction(transactionId)
         } else if (initialType.isNotBlank()) {
             viewModel.onTypeChange(initialType)
+        }
+    }
+
+    LaunchedEffect(uiState.errorMessage) {
+        if (uiState.errorMessage != null) {
+            when (uiState.focusTarget) {
+                FocusTarget.AMOUNT -> amountFocusRequester.requestFocus()
+                FocusTarget.TITLE -> titleFocusRequester.requestFocus()
+                else -> {}
+            }
         }
     }
 
@@ -71,7 +87,7 @@ fun AddEditTransactionScreen(
                     onDismissRequest = { },
                     icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(48.dp)) },
                     title = { Text("Transaction Saved", fontWeight = FontWeight.Bold) },
-                    text = { Text("Your transaction has been saved successfully to your cloud account!") },
+                    text = { Text("Your transaction has been saved successfully!") },
                     confirmButton = {
                         Button(
                             onClick = onNavigateBack,
@@ -113,7 +129,7 @@ fun AddEditTransactionScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // DATE SELECTOR SECTION (ABOVE AMOUNT BOX as requested)
+            // DATE SELECTOR SECTION (ABOVE AMOUNT BOX)
             Text(
                 text = "Transaction Date",
                 style = MaterialTheme.typography.labelMedium,
@@ -187,7 +203,7 @@ fun AddEditTransactionScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Amount Input
+            // Amount Input - Primary validation focus target
             OutlinedTextField(
                 value = uiState.amountText,
                 onValueChange = { viewModel.onAmountChange(it) },
@@ -195,7 +211,9 @@ fun AddEditTransactionScreen(
                 leadingIcon = { Text(uiState.currencySymbol, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.padding(start = 12.dp)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(amountFocusRequester)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -207,7 +225,9 @@ fun AddEditTransactionScreen(
                 label = { Text("Transaction Title") },
                 leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(titleFocusRequester)
             )
 
             Spacer(modifier = Modifier.height(16.dp))

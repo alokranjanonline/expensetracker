@@ -32,10 +32,15 @@ class SettingsViewModel(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    private val _infoMessage = MutableStateFlow<String?>(null)
+
     val uiState: StateFlow<SettingsUiState> = combine(
         settingsRepository.settings,
-        categoryRepository.allCategories
-    ) { settings, categories ->
+        categoryRepository.allCategories,
+        _infoMessage,
+        _errorMessage
+    ) { settings, categories, info, err ->
 
         val user = authRepository.currentUser
         val verified = user?.isEmailVerified == true
@@ -45,13 +50,19 @@ class SettingsViewModel(
             categories = categories,
             userDisplayName = user?.displayName ?: "Personal Account",
             userEmail = user?.email ?: "local@expensetracker.app",
-            isUserVerified = verified
+            isUserVerified = verified,
+            infoMessage = info,
+            errorMessage = err
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = SettingsUiState()
     )
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
 
     fun onThemeChange(themeMode: String) {
         viewModelScope.launch {
@@ -95,10 +106,26 @@ class SettingsViewModel(
         }
     }
 
-    fun addCustomCategory(name: String, type: String, iconName: String, colorHex: Long) {
+    fun addCustomCategory(name: String, type: String, iconName: String, colorHex: Long): Boolean {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) {
+            _errorMessage.value = "Category name cannot be blank."
+            return false
+        }
+
+        val existing = uiState.value.categories.any {
+            it.type.equals(type, ignoreCase = true) && it.name.trim().equals(trimmed, ignoreCase = true)
+        }
+
+        if (existing) {
+            _errorMessage.value = "A category named '$trimmed' already exists for $type."
+            return false
+        }
+
+        _errorMessage.value = null
         viewModelScope.launch {
             val category = CategoryModel(
-                name = name,
+                name = trimmed,
                 type = type,
                 iconName = iconName,
                 colorHex = colorHex,
@@ -106,12 +133,30 @@ class SettingsViewModel(
             )
             categoryRepository.saveCategory(category)
         }
+        return true
     }
 
-    fun updateCategory(category: CategoryModel) {
-        viewModelScope.launch {
-            categoryRepository.saveCategory(category)
+    fun updateCategory(category: CategoryModel): Boolean {
+        val trimmed = category.name.trim()
+        if (trimmed.isBlank()) {
+            _errorMessage.value = "Category name cannot be blank."
+            return false
         }
+
+        val existing = uiState.value.categories.any {
+            it.id != category.id && it.type.equals(category.type, ignoreCase = true) && it.name.trim().equals(trimmed, ignoreCase = true)
+        }
+
+        if (existing) {
+            _errorMessage.value = "A category named '$trimmed' already exists for ${category.type}."
+            return false
+        }
+
+        _errorMessage.value = null
+        viewModelScope.launch {
+            categoryRepository.saveCategory(category.copy(name = trimmed))
+        }
+        return true
     }
 
     fun deleteCategory(category: CategoryModel) {
@@ -129,9 +174,9 @@ class SettingsViewModel(
                 uiState.value.settings.dateFormat
             )
             if (success) {
-                setMessage("Transactions exported to CSV successfully!")
+                _infoMessage.value = "Transactions exported to CSV successfully!"
             } else {
-                setError("Failed to export CSV.")
+                _errorMessage.value = "Failed to export CSV."
             }
         }
     }
@@ -148,9 +193,9 @@ class SettingsViewModel(
                 context, uri, transactions, categories, budgets, recurring, settings
             )
             if (success) {
-                setMessage("Backup created successfully!")
+                _infoMessage.value = "Backup created successfully!"
             } else {
-                setError("Failed to create backup file.")
+                _errorMessage.value = "Failed to create backup file."
             }
         }
     }
@@ -161,9 +206,9 @@ class SettingsViewModel(
                 context, uri, transactionRepository, categoryRepository, budgetRepository, recurringRepository, settingsRepository
             )
             result.onSuccess {
-                setMessage("Data restored successfully!")
+                _infoMessage.value = "Data restored successfully!"
             }.onFailure { error ->
-                setError(error.localizedMessage ?: "Failed to restore data.")
+                _errorMessage.value = error.localizedMessage ?: "Failed to restore data."
             }
         }
     }
@@ -171,16 +216,8 @@ class SettingsViewModel(
     fun clearAllData() {
         viewModelScope.launch {
             transactionRepository.clearAll()
-            setMessage("All transaction data cleared.")
+            _infoMessage.value = "All transaction data cleared."
         }
-    }
-
-    fun setMessage(msg: String) {
-        // Log or show toast
-    }
-
-    fun setError(err: String) {
-        // Log or show toast
     }
 
     fun logout() {

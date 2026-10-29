@@ -1,15 +1,21 @@
 package com.sedexpensetracker.expensetracker.ui.navigation
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
@@ -25,6 +31,7 @@ import com.sedexpensetracker.expensetracker.ui.screens.transactions.AddEditTrans
 import com.sedexpensetracker.expensetracker.ui.screens.transactions.TransactionsScreen
 import com.sedexpensetracker.expensetracker.ui.theme.ExpenseTrackerTheme
 import com.sedexpensetracker.expensetracker.viewmodel.*
+import kotlinx.coroutines.launch
 
 @Composable
 fun ExpenseTrackerApp() {
@@ -79,22 +86,29 @@ fun ExpenseTrackerApp() {
             val navBackStackEntry by mainNavController.currentBackStackEntryAsState()
             val currentRoute = navBackStackEntry?.destination?.route
 
-            val showBottomBar = Screen.bottomNavItems.any { it.route == currentRoute }
+            val mainTabScreens = listOf(
+                Screen.Home,
+                Screen.Transactions,
+                Screen.Reports,
+                Screen.Budgets,
+                Screen.Settings
+            )
+
+            val pagerState = rememberPagerState(initialPage = 0, pageCount = { mainTabScreens.size })
+            val coroutineScope = rememberCoroutineScope()
+
+            val isMainTabRoute = currentRoute == "main_tabs" || currentRoute == null || Screen.bottomNavItems.any { it.route == currentRoute }
 
             Scaffold(
                 bottomBar = {
-                    if (showBottomBar) {
+                    if (isMainTabRoute) {
                         NavigationBar {
-                            Screen.bottomNavItems.forEach { screen ->
+                            mainTabScreens.forEachIndexed { index, screen ->
                                 NavigationBarItem(
-                                    selected = currentRoute == screen.route,
+                                    selected = pagerState.currentPage == index,
                                     onClick = {
-                                        mainNavController.navigate(screen.route) {
-                                            popUpTo(mainNavController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
+                                        coroutineScope.launch {
+                                            pagerState.animateScrollToPage(index)
                                         }
                                     },
                                     icon = {
@@ -103,7 +117,15 @@ fun ExpenseTrackerApp() {
                                         }
                                     },
                                     label = {
-                                        screen.title?.let { Text(it) }
+                                        screen.title?.let { title ->
+                                            Text(
+                                                text = title,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
                                     }
                                 )
                             }
@@ -111,7 +133,7 @@ fun ExpenseTrackerApp() {
                     }
                 },
                 floatingActionButton = {
-                    if (showBottomBar) {
+                    if (isMainTabRoute) {
                         FloatingActionButton(
                             onClick = {
                                 mainNavController.navigate(Screen.AddEditTransaction.createRoute())
@@ -122,85 +144,97 @@ fun ExpenseTrackerApp() {
                     }
                 }
             ) { innerPadding ->
-                NavHost(
-                    navController = mainNavController,
-                    startDestination = Screen.Home.route,
-                    modifier = Modifier.padding(innerPadding)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 ) {
-                    composable(Screen.Home.route) {
-                        val homeViewModel: HomeViewModel = viewModel(factory = factory)
-                        HomeScreen(
-                            viewModel = homeViewModel,
-                            onNavigateToAddTransaction = { type ->
-                                mainNavController.navigate(Screen.AddEditTransaction.createRoute(initialType = type))
-                            },
-                            onNavigateToTransactions = {
-                                mainNavController.navigate(Screen.Transactions.route)
-                            },
-                            onTransactionClick = { tx ->
-                                mainNavController.navigate(Screen.AddEditTransaction.createRoute(transactionId = tx.id))
+                    NavHost(
+                        navController = mainNavController,
+                        startDestination = "main_tabs"
+                    ) {
+                        composable("main_tabs") {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxSize()
+                            ) { page ->
+                                when (page) {
+                                    0 -> {
+                                        val homeViewModel: HomeViewModel = viewModel(factory = factory)
+                                        HomeScreen(
+                                            viewModel = homeViewModel,
+                                            onNavigateToAddTransaction = { type ->
+                                                mainNavController.navigate(Screen.AddEditTransaction.createRoute(initialType = type))
+                                            },
+                                            onNavigateToTransactions = {
+                                                coroutineScope.launch {
+                                                    pagerState.animateScrollToPage(1)
+                                                }
+                                            },
+                                            onTransactionClick = { tx ->
+                                                mainNavController.navigate(Screen.AddEditTransaction.createRoute(transactionId = tx.id))
+                                            }
+                                        )
+                                    }
+                                    1 -> {
+                                        val transactionViewModel: TransactionViewModel = viewModel(factory = factory)
+                                        TransactionsScreen(
+                                            viewModel = transactionViewModel,
+                                            onEditTransaction = { id ->
+                                                mainNavController.navigate(Screen.AddEditTransaction.createRoute(transactionId = id))
+                                            }
+                                        )
+                                    }
+                                    2 -> {
+                                        val reportsViewModel: ReportsViewModel = viewModel(factory = factory)
+                                        ReportsScreen(viewModel = reportsViewModel)
+                                    }
+                                    3 -> {
+                                        val budgetViewModel: BudgetViewModel = viewModel(factory = factory)
+                                        BudgetsScreen(viewModel = budgetViewModel)
+                                    }
+                                    4 -> {
+                                        SettingsScreen(
+                                            viewModel = settingsViewModel,
+                                            onNavigateToCategoryManager = {
+                                                mainNavController.navigate(Screen.CategoryManager.route)
+                                            },
+                                            onLogout = {
+                                                authViewModel.logout()
+                                            }
+                                        )
+                                    }
+                                }
                             }
-                        )
-                    }
+                        }
 
-                    composable(Screen.Transactions.route) {
-                        val transactionViewModel: TransactionViewModel = viewModel(factory = factory)
-                        TransactionsScreen(
-                            viewModel = transactionViewModel,
-                            onEditTransaction = { id ->
-                                mainNavController.navigate(Screen.AddEditTransaction.createRoute(transactionId = id))
-                            }
-                        )
-                    }
+                        composable(
+                            route = Screen.AddEditTransaction.route,
+                            arguments = listOf(
+                                navArgument("transactionId") { type = NavType.StringType; defaultValue = "" },
+                                navArgument("initialType") { type = NavType.StringType; defaultValue = "EXPENSE" }
+                            )
+                        ) { backStackEntry ->
+                            val txIdArg = backStackEntry.arguments?.getString("transactionId")
+                            val txId = if (txIdArg.isNullOrBlank()) null else txIdArg
+                            val initialType = backStackEntry.arguments?.getString("initialType") ?: "EXPENSE"
 
-                    composable(Screen.Reports.route) {
-                        val reportsViewModel: ReportsViewModel = viewModel(factory = factory)
-                        ReportsScreen(viewModel = reportsViewModel)
-                    }
+                            val addEditViewModel: AddEditTransactionViewModel = viewModel(factory = factory)
 
-                    composable(Screen.Budgets.route) {
-                        val budgetViewModel: BudgetViewModel = viewModel(factory = factory)
-                        BudgetsScreen(viewModel = budgetViewModel)
-                    }
+                            AddEditTransactionScreen(
+                                viewModel = addEditViewModel,
+                                transactionId = txId,
+                                initialType = initialType,
+                                onNavigateBack = { mainNavController.popBackStack() }
+                            )
+                        }
 
-                    composable(Screen.Settings.route) {
-                        SettingsScreen(
-                            viewModel = settingsViewModel,
-                            onNavigateToCategoryManager = {
-                                mainNavController.navigate(Screen.CategoryManager.route)
-                            },
-                            onLogout = {
-                                authViewModel.logout()
-                            }
-                        )
-                    }
-
-                    composable(
-                        route = Screen.AddEditTransaction.route,
-                        arguments = listOf(
-                            navArgument("transactionId") { type = NavType.StringType; defaultValue = "" },
-                            navArgument("initialType") { type = NavType.StringType; defaultValue = "EXPENSE" }
-                        )
-                    ) { backStackEntry ->
-                        val txIdArg = backStackEntry.arguments?.getString("transactionId")
-                        val txId = if (txIdArg.isNullOrBlank()) null else txIdArg
-                        val initialType = backStackEntry.arguments?.getString("initialType") ?: "EXPENSE"
-
-                        val addEditViewModel: AddEditTransactionViewModel = viewModel(factory = factory)
-
-                        AddEditTransactionScreen(
-                            viewModel = addEditViewModel,
-                            transactionId = txId,
-                            initialType = initialType,
-                            onNavigateBack = { mainNavController.popBackStack() }
-                        )
-                    }
-
-                    composable(Screen.CategoryManager.route) {
-                        CategoryManagerScreen(
-                            viewModel = settingsViewModel,
-                            onNavigateBack = { mainNavController.popBackStack() }
-                        )
+                        composable(Screen.CategoryManager.route) {
+                            CategoryManagerScreen(
+                                viewModel = settingsViewModel,
+                                onNavigateBack = { mainNavController.popBackStack() }
+                            )
+                        }
                     }
                 }
             }

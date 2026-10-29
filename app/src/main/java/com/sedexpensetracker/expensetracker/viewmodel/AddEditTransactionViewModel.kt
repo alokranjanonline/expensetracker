@@ -15,6 +15,8 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Locale
 
+enum class FocusTarget { NONE, AMOUNT, TITLE }
+
 data class AddEditTransactionUiState(
     val transactionId: String? = null,
     val title: String = "",
@@ -30,6 +32,7 @@ data class AddEditTransactionUiState(
     val currencySymbol: String = "$",
     val dateFormat: String = "MMM dd, yyyy",
     val errorMessage: String? = null,
+    val focusTarget: FocusTarget = FocusTarget.NONE,
     val saveSuccess: Boolean = false,
     val isLoading: Boolean = false
 )
@@ -54,6 +57,7 @@ class AddEditTransactionViewModel(
     private val _transactionId = MutableStateFlow<String?>(null)
 
     private val _errorMessage = MutableStateFlow<String?>(null)
+    private val _focusTarget = MutableStateFlow(FocusTarget.NONE)
     private val _saveSuccess = MutableStateFlow(false)
     private val _isLoading = MutableStateFlow(false)
 
@@ -62,7 +66,7 @@ class AddEditTransactionViewModel(
         settingsRepository.settings,
         combine(_transactionType, _selectedCategoryId, _title, _amountText, ::InputsPart1),
         combine(_dateTime, _notes, _paymentMethod, _isRecurring, ::InputsPart2),
-        combine(_recurrenceInterval, _errorMessage, _saveSuccess, _isLoading, ::InputsPart3)
+        combine(_recurrenceInterval, _errorMessage, _focusTarget, _saveSuccess, _isLoading, ::InputsPart3)
     ) { allCategories, settings, p1, p2, p3 ->
         val filtered = allCategories.filter { it.type == p1.type }
         val selCat = if (!p1.selCatId.isNullOrBlank()) {
@@ -86,6 +90,7 @@ class AddEditTransactionViewModel(
             currencySymbol = settings.currencySymbol,
             dateFormat = settings.dateFormat,
             errorMessage = p3.errorMessage,
+            focusTarget = p3.focusTarget,
             saveSuccess = p3.saveSuccess,
             isLoading = p3.isLoading
         )
@@ -128,16 +133,19 @@ class AddEditTransactionViewModel(
     fun onTitleChange(title: String) {
         _title.value = title
         _errorMessage.value = null
+        _focusTarget.value = FocusTarget.NONE
     }
 
     fun onAmountChange(amount: String) {
         _amountText.value = amount
         _errorMessage.value = null
+        _focusTarget.value = FocusTarget.NONE
     }
 
     fun onCategoryChange(category: CategoryModel) {
         _selectedCategoryId.value = category.id
         _errorMessage.value = null
+        _focusTarget.value = FocusTarget.NONE
     }
 
     fun onDateTimeChange(millis: Long) {
@@ -166,23 +174,30 @@ class AddEditTransactionViewModel(
         val amountMinorUnits = CurrencyFormatter.parseToMinorUnits(state.amountText)
         val category = state.selectedCategory
 
-        if (title.isBlank()) {
-            _errorMessage.value = "Please enter a title."
-            return
-        }
-
+        // Validate Amount FIRST - Focus on Amount box
         if (amountMinorUnits <= 0) {
-            _errorMessage.value = "Please enter a valid positive amount."
+            _focusTarget.value = FocusTarget.AMOUNT
+            _errorMessage.value = "Please enter a valid amount."
             return
         }
 
+        // Validate Title SECOND - Focus on Title box
+        if (title.isBlank()) {
+            _focusTarget.value = FocusTarget.TITLE
+            _errorMessage.value = "Please enter a transaction title."
+            return
+        }
+
+        // Validate Category THIRD
         if (category == null) {
+            _focusTarget.value = FocusTarget.NONE
             _errorMessage.value = "Please select a category."
             return
         }
 
         _isLoading.value = true
         _errorMessage.value = null
+        _focusTarget.value = FocusTarget.NONE
 
         val tx = TransactionModel(
             id = state.transactionId ?: "",
@@ -244,6 +259,7 @@ private data class InputsPart2(
 private data class InputsPart3(
     val recurrenceInterval: String,
     val errorMessage: String?,
+    val focusTarget: FocusTarget,
     val saveSuccess: Boolean,
     val isLoading: Boolean
 )

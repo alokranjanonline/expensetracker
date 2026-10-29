@@ -1,14 +1,21 @@
 package com.sedexpensetracker.expensetracker.ui.screens.reports
 
+import android.app.DatePickerDialog
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sedexpensetracker.expensetracker.ui.components.BarChart
@@ -17,12 +24,18 @@ import com.sedexpensetracker.expensetracker.ui.components.DonutPieChart
 import com.sedexpensetracker.expensetracker.utilities.CurrencyFormatter
 import com.sedexpensetracker.expensetracker.viewmodel.ReportPeriod
 import com.sedexpensetracker.expensetracker.viewmodel.ReportsViewModel
+import java.util.Calendar
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportsScreen(viewModel: ReportsViewModel) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    var showCustomRangeDialog by remember { mutableStateOf(false) }
+    var tempStartMillis by remember { mutableStateOf<Long?>(null) }
+    var tempEndMillis by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
@@ -40,10 +53,12 @@ fun ReportsScreen(viewModel: ReportsViewModel) {
         ) {
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
-            // Period Selector Tabs
+            // Period Selector Tabs in a Single Horizontal Line
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     FilterChip(
@@ -60,6 +75,26 @@ fun ReportsScreen(viewModel: ReportsViewModel) {
                         selected = uiState.selectedPeriod == ReportPeriod.MONTHLY,
                         onClick = { viewModel.onPeriodChange(ReportPeriod.MONTHLY) },
                         label = { Text("This Month") }
+                    )
+                    FilterChip(
+                        selected = uiState.selectedPeriod == ReportPeriod.THIS_YEAR,
+                        onClick = { viewModel.onPeriodChange(ReportPeriod.THIS_YEAR) },
+                        label = { Text("This Year") }
+                    )
+                    FilterChip(
+                        selected = uiState.selectedPeriod == ReportPeriod.THIS_FY,
+                        onClick = { viewModel.onPeriodChange(ReportPeriod.THIS_FY) },
+                        label = { Text("This FY") }
+                    )
+                    FilterChip(
+                        selected = uiState.selectedPeriod == ReportPeriod.CUSTOM,
+                        onClick = {
+                            tempStartMillis = uiState.customStartMillis
+                            tempEndMillis = uiState.customEndMillis
+                            showCustomRangeDialog = true
+                        },
+                        label = { Text("Custom Range") },
+                        leadingIcon = { Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(18.dp)) }
                     )
                 }
             }
@@ -232,6 +267,114 @@ fun ReportsScreen(viewModel: ReportsViewModel) {
             }
 
             item { Spacer(modifier = Modifier.height(16.dp)) }
+        }
+
+        // Custom Date Range Dialog
+        if (showCustomRangeDialog) {
+            AlertDialog(
+                onDismissRequest = { showCustomRangeDialog = false },
+                title = { Text("Select Custom Date Range", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("Select Start Date and End Date to view report analytics for that period:", style = MaterialTheme.typography.bodyMedium)
+
+                        // Start Date Box
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val cal = Calendar.getInstance().apply {
+                                        timeInMillis = tempStartMillis ?: System.currentTimeMillis()
+                                    }
+                                    DatePickerDialog(
+                                        context,
+                                        { _, year, month, dayOfMonth ->
+                                            val startCal = Calendar.getInstance().apply {
+                                                set(year, month, dayOfMonth, 0, 0, 0)
+                                            }
+                                            tempStartMillis = startCal.timeInMillis
+                                            if (tempEndMillis == null || tempEndMillis!! < startCal.timeInMillis) {
+                                                val endCal = Calendar.getInstance().apply {
+                                                    set(year, month, dayOfMonth, 23, 59, 59)
+                                                }
+                                                tempEndMillis = endCal.timeInMillis
+                                            }
+                                        },
+                                        cal.get(Calendar.YEAR),
+                                        cal.get(Calendar.MONTH),
+                                        cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Start Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (tempStartMillis != null) CurrencyFormatter.formatDate(tempStartMillis!!, uiState.dateFormat) else "Select Start Date",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        // End Date Box
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val cal = Calendar.getInstance().apply {
+                                        timeInMillis = tempEndMillis ?: tempStartMillis ?: System.currentTimeMillis()
+                                    }
+                                    DatePickerDialog(
+                                        context,
+                                        { _, year, month, dayOfMonth ->
+                                            val endCal = Calendar.getInstance().apply {
+                                                set(year, month, dayOfMonth, 23, 59, 59)
+                                            }
+                                            tempEndMillis = endCal.timeInMillis
+                                        },
+                                        cal.get(Calendar.YEAR),
+                                        cal.get(Calendar.MONTH),
+                                        cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("End Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (tempEndMillis != null) CurrencyFormatter.formatDate(tempEndMillis!!, uiState.dateFormat) else "Select End Date",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (tempStartMillis != null) {
+                                val start = tempStartMillis!!
+                                val end = tempEndMillis ?: start
+                                viewModel.onCustomDateRangeChange(start, end)
+                            }
+                            showCustomRangeDialog = false
+                        }
+                    ) {
+                        Text("Apply Range", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCustomRangeDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }

@@ -68,26 +68,38 @@ object BackupRestoreManager {
         settingsRepository: SettingsRepository
     ): Result<Unit> {
         return try {
-            val jsonString = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                ?: return Result.failure(Exception("Failed to read backup file."))
+            val content = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                ?: return Result.failure(Exception("Failed to read file."))
 
-            val backupData = gson.fromJson(jsonString, BackupData::class.java)
-                ?: return Result.failure(Exception("Invalid backup format."))
+            if (content.trim().startsWith("{")) {
+                // Parse JSON backup format
+                val backupData = gson.fromJson(content, BackupData::class.java)
+                    ?: return Result.failure(Exception("Invalid backup format."))
 
-            for (category in backupData.categories) {
-                categoryRepository.saveCategory(category)
-            }
-            for (tx in backupData.transactions) {
-                transactionRepository.saveTransaction(tx)
-            }
-            for (budget in backupData.budgets) {
-                budgetRepository.saveBudget(budget)
-            }
-            for (rec in backupData.recurringTransactions) {
-                recurringRepository.saveRecurringTransaction(rec)
-            }
-            backupData.settings?.let {
-                settingsRepository.saveSettings(it)
+                for (category in backupData.categories) {
+                    categoryRepository.saveCategory(category)
+                }
+                for (tx in backupData.transactions) {
+                    transactionRepository.saveTransaction(tx)
+                }
+                for (budget in backupData.budgets) {
+                    budgetRepository.saveBudget(budget)
+                }
+                for (rec in backupData.recurringTransactions) {
+                    recurringRepository.saveRecurringTransaction(rec)
+                }
+                backupData.settings?.let {
+                    settingsRepository.saveSettings(it)
+                }
+            } else {
+                // Parse CSV format
+                val csvTransactions = CsvExporter.parseCsvToTransactions(content)
+                if (csvTransactions.isEmpty()) {
+                    return Result.failure(Exception("No valid transaction rows found in CSV file."))
+                }
+                for (tx in csvTransactions) {
+                    transactionRepository.saveTransaction(tx)
+                }
             }
 
             Result.success(Unit)

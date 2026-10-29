@@ -17,8 +17,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sedexpensetracker.expensetracker.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,6 +37,7 @@ fun SettingsScreen(
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showDateFormatDialog by remember { mutableStateOf(false) }
+    var showSampleCsvDialog by remember { mutableStateOf(false) }
 
     val csvExportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
@@ -245,12 +248,19 @@ fun SettingsScreen(
                     )
                     HorizontalDivider()
                     ListItem(
-                        headlineContent = { Text("Restore Data") },
-                        supportingContent = { Text("Restore records from a backup file") },
+                        headlineContent = { Text("Restore Data (CSV or JSON)") },
+                        supportingContent = { Text("Restore records from a CSV or JSON file") },
                         leadingContent = { Icon(Icons.Default.Restore, contentDescription = null) },
                         modifier = Modifier.clickable {
-                            restoreLauncher.launch(arrayOf("application/json", "*/*"))
+                            restoreLauncher.launch(arrayOf("*/*"))
                         }
+                    )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("View Sample CSV Format") },
+                        supportingContent = { Text("Required column headers for CSV import") },
+                        leadingContent = { Icon(Icons.Default.TableChart, contentDescription = null) },
+                        modifier = Modifier.clickable { showSampleCsvDialog = true }
                     )
                 }
             }
@@ -278,6 +288,37 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Sample CSV Format Dialog
+        if (showSampleCsvDialog) {
+            AlertDialog(
+                onDismissRequest = { showSampleCsvDialog = false },
+                title = { Text("Sample CSV Format for Restore", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Your CSV file must include these headers in the first line:", style = MaterialTheme.typography.bodySmall)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Date,Amount,Title,notes,categoryName,type\nFeb 14 2025,120.50,Grocery Shopping,Weekly groceries,Food & Dining,EXPENSE\nFeb 15 2025,5000.00,Monthly Salary,Salary payout,Salary,INCOME",
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                        Text("Supported date formats: 'MMM dd, yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd', 'MM/dd/yyyy'.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { showSampleCsvDialog = false }) {
+                        Text("Got It")
+                    }
+                }
+            )
         }
 
         // Date Format Dialog

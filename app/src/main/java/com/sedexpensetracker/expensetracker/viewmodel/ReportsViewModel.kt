@@ -10,7 +10,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-enum class ReportPeriod { DAILY, WEEKLY, MONTHLY, CUSTOM }
+enum class ReportPeriod { DAILY, WEEKLY, MONTHLY, THIS_YEAR, THIS_FY, CUSTOM }
 
 data class PieSliceData(
     val categoryName: String,
@@ -77,6 +77,47 @@ class ReportsViewModel(
             }
             ReportPeriod.MONTHLY -> {
                 Pair(CurrencyFormatter.getStartOfMonthMillis(now), CurrencyFormatter.getEndOfMonthMillis(now))
+            }
+            ReportPeriod.THIS_YEAR -> {
+                val cal = Calendar.getInstance()
+                cal.set(Calendar.MONTH, Calendar.JANUARY)
+                cal.set(Calendar.DAY_OF_MONTH, 1)
+                cal.set(Calendar.HOUR_OF_DAY, 0)
+                cal.set(Calendar.MINUTE, 0)
+                cal.set(Calendar.SECOND, 0)
+                val start = cal.timeInMillis
+
+                val endCal = Calendar.getInstance()
+                endCal.set(Calendar.MONTH, Calendar.DECEMBER)
+                endCal.set(Calendar.DAY_OF_MONTH, 31)
+                endCal.set(Calendar.HOUR_OF_DAY, 23)
+                endCal.set(Calendar.MINUTE, 59)
+                endCal.set(Calendar.SECOND, 59)
+                Pair(start, endCal.timeInMillis)
+            }
+            ReportPeriod.THIS_FY -> {
+                val cal = Calendar.getInstance()
+                val currentMonth = cal.get(Calendar.MONTH)
+                val fyStartYear = if (currentMonth >= Calendar.APRIL) cal.get(Calendar.YEAR) else cal.get(Calendar.YEAR) - 1
+
+                val startCal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, fyStartYear)
+                    set(Calendar.MONTH, Calendar.APRIL)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                }
+
+                val endCal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, fyStartYear + 1)
+                    set(Calendar.MONTH, Calendar.MARCH)
+                    set(Calendar.DAY_OF_MONTH, 31)
+                    set(Calendar.HOUR_OF_DAY, 23)
+                    set(Calendar.MINUTE, 59)
+                    set(Calendar.SECOND, 59)
+                }
+                Pair(startCal.timeInMillis, endCal.timeInMillis)
             }
             ReportPeriod.CUSTOM -> {
                 Pair(params.start, params.end)

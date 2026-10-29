@@ -55,14 +55,24 @@ fun CategoryManagerScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = {
-                categoryNameInput = ""
-                categoryTypeInput = "EXPENSE"
-                selectedIconName = "Restaurant"
-                selectedColorHex = 0xFFFF5722L
-                showAddCategoryDialog = true
-            }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Custom Category")
+            FloatingActionButton(
+                onClick = {
+                    viewModel.clearError()
+                    categoryNameInput = ""
+                    categoryTypeInput = "EXPENSE"
+                    selectedIconName = "Restaurant"
+                    selectedColorHex = 0xFFFF5722L
+                    showAddCategoryDialog = true
+                },
+                containerColor = Color(0xFF1E88E5),
+                contentColor = Color.White
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add Custom Category",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
             }
         }
     ) { innerPadding ->
@@ -114,6 +124,7 @@ fun CategoryManagerScreen(
                         }
 
                         IconButton(onClick = {
+                            viewModel.clearError()
                             editingCategory = category
                             categoryNameInput = category.name
                             categoryTypeInput = category.type
@@ -136,16 +147,36 @@ fun CategoryManagerScreen(
         // Add Category Dialog
         if (showAddCategoryDialog) {
             AlertDialog(
-                onDismissRequest = { showAddCategoryDialog = false },
+                onDismissRequest = {
+                    viewModel.clearError()
+                    showAddCategoryDialog = false
+                },
                 title = { Text("Create Custom Category") },
                 text = {
                     Column(
                         modifier = Modifier.verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        uiState.errorMessage?.let { err ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = err,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
                         OutlinedTextField(
                             value = categoryNameInput,
-                            onValueChange = { categoryNameInput = it },
+                            onValueChange = {
+                                categoryNameInput = it
+                                viewModel.clearError()
+                            },
                             label = { Text("Category Name") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -154,12 +185,18 @@ fun CategoryManagerScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
                                 selected = categoryTypeInput == "EXPENSE",
-                                onClick = { categoryTypeInput = "EXPENSE" },
+                                onClick = {
+                                    categoryTypeInput = "EXPENSE"
+                                    viewModel.clearError()
+                                },
                                 label = { Text("Expense") }
                             )
                             FilterChip(
                                 selected = categoryTypeInput == "INCOME",
-                                onClick = { categoryTypeInput = "INCOME" },
+                                onClick = {
+                                    categoryTypeInput = "INCOME"
+                                    viewModel.clearError()
+                                },
                                 label = { Text("Income") }
                             )
                         }
@@ -215,13 +252,13 @@ fun CategoryManagerScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            if (categoryNameInput.isNotBlank()) {
-                                viewModel.addCustomCategory(
-                                    name = categoryNameInput,
-                                    type = categoryTypeInput,
-                                    iconName = selectedIconName,
-                                    colorHex = selectedColorHex
-                                )
+                            val success = viewModel.addCustomCategory(
+                                name = categoryNameInput,
+                                type = categoryTypeInput,
+                                iconName = selectedIconName,
+                                colorHex = selectedColorHex
+                            )
+                            if (success) {
                                 categoryNameInput = ""
                                 showAddCategoryDialog = false
                             }
@@ -231,7 +268,10 @@ fun CategoryManagerScreen(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showAddCategoryDialog = false }) { Text("Cancel") }
+                    TextButton(onClick = {
+                        viewModel.clearError()
+                        showAddCategoryDialog = false
+                    }) { Text("Cancel") }
                 }
             )
         }
@@ -239,16 +279,36 @@ fun CategoryManagerScreen(
         // Edit Category Dialog
         editingCategory?.let { categoryToEdit ->
             AlertDialog(
-                onDismissRequest = { editingCategory = null },
+                onDismissRequest = {
+                    viewModel.clearError()
+                    editingCategory = null
+                },
                 title = { Text("Edit Category") },
                 text = {
                     Column(
                         modifier = Modifier.verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        uiState.errorMessage?.let { err ->
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = err,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
                         OutlinedTextField(
                             value = categoryNameInput,
-                            onValueChange = { categoryNameInput = it },
+                            onValueChange = {
+                                categoryNameInput = it
+                                viewModel.clearError()
+                            },
                             label = { Text("Category Name") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
@@ -257,12 +317,18 @@ fun CategoryManagerScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(
                                 selected = categoryTypeInput == "EXPENSE",
-                                onClick = { categoryTypeInput = "EXPENSE" },
+                                onClick = {
+                                    categoryTypeInput = "EXPENSE"
+                                    viewModel.clearError()
+                                },
                                 label = { Text("Expense") }
                             )
                             FilterChip(
                                 selected = categoryTypeInput == "INCOME",
-                                onClick = { categoryTypeInput = "INCOME" },
+                                onClick = {
+                                    categoryTypeInput = "INCOME"
+                                    viewModel.clearError()
+                                },
                                 label = { Text("Income") }
                             )
                         }
@@ -318,14 +384,14 @@ fun CategoryManagerScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            if (categoryNameInput.isNotBlank()) {
-                                val updated = categoryToEdit.copy(
-                                    name = categoryNameInput,
-                                    type = categoryTypeInput,
-                                    iconName = selectedIconName,
-                                    colorHex = selectedColorHex
-                                )
-                                viewModel.updateCategory(updated)
+                            val updated = categoryToEdit.copy(
+                                name = categoryNameInput,
+                                type = categoryTypeInput,
+                                iconName = selectedIconName,
+                                colorHex = selectedColorHex
+                            )
+                            val success = viewModel.updateCategory(updated)
+                            if (success) {
                                 editingCategory = null
                             }
                         }
@@ -334,7 +400,10 @@ fun CategoryManagerScreen(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { editingCategory = null }) { Text("Cancel") }
+                    TextButton(onClick = {
+                        viewModel.clearError()
+                        editingCategory = null
+                    }) { Text("Cancel") }
                 }
             )
         }

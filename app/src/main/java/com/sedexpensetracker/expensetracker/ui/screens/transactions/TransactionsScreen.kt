@@ -1,5 +1,7 @@
 package com.sedexpensetracker.expensetracker.ui.screens.transactions
 
+import android.app.DatePickerDialog
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.sedexpensetracker.expensetracker.data.models.TransactionModel
@@ -17,6 +20,7 @@ import com.sedexpensetracker.expensetracker.ui.screens.home.TransactionItemRow
 import com.sedexpensetracker.expensetracker.utilities.CurrencyFormatter
 import com.sedexpensetracker.expensetracker.viewmodel.SortOption
 import com.sedexpensetracker.expensetracker.viewmodel.TransactionViewModel
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,12 +29,15 @@ fun TransactionsScreen(
     onEditTransaction: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     var showFilterSheet by remember { mutableStateOf(false) }
-    var showDateRangePicker by remember { mutableStateOf(false) }
+    var showDateRangeDialog by remember { mutableStateOf(false) }
     var selectedDetailTx by remember { mutableStateOf<TransactionModel?>(null) }
+    var deletingTransaction by remember { mutableStateOf<TransactionModel?>(null) }
 
-    val dateRangePickerState = rememberDateRangePickerState()
+    var tempStartMillis by remember { mutableStateOf<Long?>(null) }
+    var tempEndMillis by remember { mutableStateOf<Long?>(null) }
 
     Scaffold(
         topBar = {
@@ -71,7 +78,7 @@ fun TransactionsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ORDER: Expense, Income, All
+            // ORDER: Expense, Income, All (as requested in requirement #2)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -95,8 +102,12 @@ fun TransactionsScreen(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Date Range Button (Opens single calendar DateRangePicker)
-                IconButton(onClick = { showDateRangePicker = true }) {
+                // Date Range Button (Opens Start Date & End Date selection dialog)
+                IconButton(onClick = {
+                    tempStartMillis = uiState.startDateMillis ?: System.currentTimeMillis()
+                    tempEndMillis = uiState.endDateMillis ?: tempStartMillis
+                    showDateRangeDialog = true
+                }) {
                     Icon(
                         imageVector = if (uiState.startDateMillis != null) Icons.Default.DateRange else Icons.Default.CalendarMonth,
                         contentDescription = "Select Date Range",
@@ -174,40 +185,115 @@ fun TransactionsScreen(
             }
         }
 
-        // Single Calendar Material 3 DateRangePicker Dialog
-        if (showDateRangePicker) {
-            DatePickerDialog(
-                onDismissRequest = { showDateRangePicker = false },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            val startMillis = dateRangePickerState.selectedStartDateMillis
-                            val endMillis = dateRangePickerState.selectedEndDateMillis ?: startMillis
-                            if (startMillis != null) {
-                                viewModel.onDateRangeChange(startMillis, endMillis)
+        // Two Text Selector Boxes Dialog for Start Date and End Date
+        if (showDateRangeDialog) {
+            AlertDialog(
+                onDismissRequest = { showDateRangeDialog = false },
+                title = { Text("Select Date Range", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("Select Start Date and End Date to filter transactions for that period:", style = MaterialTheme.typography.bodyMedium)
+
+                        // Start Date Box
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val cal = Calendar.getInstance().apply {
+                                        timeInMillis = tempStartMillis ?: System.currentTimeMillis()
+                                    }
+                                    DatePickerDialog(
+                                        context,
+                                        { _, year, month, dayOfMonth ->
+                                            val startCal = Calendar.getInstance().apply {
+                                                set(year, month, dayOfMonth, 0, 0, 0)
+                                            }
+                                            tempStartMillis = startCal.timeInMillis
+                                            if (tempEndMillis == null || tempEndMillis!! < startCal.timeInMillis) {
+                                                val endCal = Calendar.getInstance().apply {
+                                                    set(year, month, dayOfMonth, 23, 59, 59)
+                                                }
+                                                tempEndMillis = endCal.timeInMillis
+                                            }
+                                        },
+                                        cal.get(Calendar.YEAR),
+                                        cal.get(Calendar.MONTH),
+                                        cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("Start Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (tempStartMillis != null) CurrencyFormatter.formatDate(tempStartMillis!!, uiState.dateFormat) else "Select Start Date",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
-                            showDateRangePicker = false
+                        }
+
+                        // End Date Box
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val cal = Calendar.getInstance().apply {
+                                        timeInMillis = tempEndMillis ?: tempStartMillis ?: System.currentTimeMillis()
+                                    }
+                                    DatePickerDialog(
+                                        context,
+                                        { _, year, month, dayOfMonth ->
+                                            val endCal = Calendar.getInstance().apply {
+                                                set(year, month, dayOfMonth, 23, 59, 59)
+                                            }
+                                            tempEndMillis = endCal.timeInMillis
+                                        },
+                                        cal.get(Calendar.YEAR),
+                                        cal.get(Calendar.MONTH),
+                                        cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                }
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text("End Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (tempEndMillis != null) CurrencyFormatter.formatDate(tempEndMillis!!, uiState.dateFormat) else "Select End Date",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (tempStartMillis != null) {
+                                val start = tempStartMillis!!
+                                val end = tempEndMillis ?: start
+                                viewModel.onDateRangeChange(start, end)
+                            }
+                            showDateRangeDialog = false
                         }
                     ) {
-                        Text("OK", fontWeight = FontWeight.Bold)
+                        Text("Apply Range", fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDateRangePicker = false }) {
+                    TextButton(onClick = { showDateRangeDialog = false }) {
                         Text("Cancel")
                     }
                 }
-            ) {
-                DateRangePicker(
-                    state = dateRangePickerState,
-                    title = { Text("Select Date Range", modifier = Modifier.padding(16.dp), fontWeight = FontWeight.Bold) },
-                    headline = { Text("Pick Start & End Dates", modifier = Modifier.padding(horizontal = 16.dp)) },
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            )
         }
 
-        // Detail Dialog
+        // Transaction Detail Dialog
         selectedDetailTx?.let { tx ->
             AlertDialog(
                 onDismissRequest = { selectedDetailTx = null },
@@ -235,10 +321,36 @@ fun TransactionsScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = {
-                        viewModel.deleteTransaction(tx)
+                        deletingTransaction = tx
                         selectedDetailTx = null
                     }) {
                         Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            )
+        }
+
+        // Delete Confirmation Dialog (Requirement #1)
+        deletingTransaction?.let { txToDelete ->
+            AlertDialog(
+                onDismissRequest = { deletingTransaction = null },
+                icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp)) },
+                title = { Text("Delete Transaction?", fontWeight = FontWeight.Bold) },
+                text = { Text("Are you sure you want to delete '${txToDelete.title}'? This action cannot be undone.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.deleteTransaction(txToDelete)
+                            deletingTransaction = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deletingTransaction = null }) {
+                        Text("Cancel")
                     }
                 }
             )
