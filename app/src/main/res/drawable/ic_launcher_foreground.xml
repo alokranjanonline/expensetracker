@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="18"
+        android:translateY="18">
+        <!-- Main Wallet Card Container -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M12,20h48c4.4,0 8,3.6 8,8v24c0,4.4 -3.6,8 -8,8H12c-4.4,0 -8,-3.6 -8,-8V28c0,-4.4 3.6,-8 8,-8z" />
+        <!-- Wallet Flap & Accent -->
+        <path
+            android:fillColor="#00E676"
+            android:pathData="M48,28h20v24h-20c-3.3,0 -6,-2.7 -6,-6V34c0,-3.3 2.7,-6 6,-6z" />
+        <!-- Clasp / Coin Button -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M56,40m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" />
+        <!-- Growth Arrow / Chart Curve -->
+        <path
+            android:fillColor="#00E676"
+            android:pathData="M16,16l10,-10l8,8l14,-14h-8v-4h14v14h-4v-8l-12,12l-8,-8l-8,8z" />
+    </group>
+</vector>

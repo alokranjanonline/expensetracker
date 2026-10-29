@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "839344702543",
+    "firebase_url": "https://expensetracker-e5cae-default-rtdb.firebaseio.com",
+    "project_id": "expensetracker-e5cae",
+    "storage_bucket": "expensetracker-e5cae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:839344702543:android:6c56d7e2f7e997c158963a",
+        "android_client_info": {
+          "package_name": "com.sedexpensetracker.expensetracker"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "839344702543-jdcmnk5301uk180fo5321n418b9dbd7h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAju_B2bjUO-rjccm5Q5MADCb_XKkbDd3Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "839344702543-jdcmnk5301uk180fo5321n418b9dbd7h.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
