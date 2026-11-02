@@ -1,5 +1,6 @@
 package com.sedexpensetracker.expensetracker.data.repository
 
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -30,6 +31,11 @@ class SettingsRepository {
                     .collection("settings")
                     .document("app_settings")
                     .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.w("ExpenseTracker", "Firestore settings listen offline warning: ${error.localizedMessage}")
+                            trySend(localSettings)
+                            return@addSnapshotListener
+                        }
                         if (snapshot != null && snapshot.exists()) {
                             val value = snapshot.toObject(AppSettingsModel::class.java) ?: AppSettingsModel()
                             localSettings = value
@@ -38,7 +44,8 @@ class SettingsRepository {
                         }
                     }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("ExpenseTracker", "Error attaching settings listener: ${e.localizedMessage}", e)
+                trySend(localSettings)
             }
         }
 
@@ -69,17 +76,21 @@ class SettingsRepository {
 
         localSettings = settings
         _localSettingsFlow.value = localSettings
+        onComplete?.invoke(true, null)
 
-        if (uid != null) {
-            firestore.collection("users")
-                .document(uid)
-                .collection("settings")
-                .document("app_settings")
-                .set(settings)
-                .addOnSuccessListener { onComplete?.invoke(true, null) }
-                .addOnFailureListener { error -> onComplete?.invoke(false, error.localizedMessage) }
-        } else {
-            onComplete?.invoke(true, null)
+        if (!uid.isNullOrBlank()) {
+            try {
+                firestore.collection("users")
+                    .document(uid)
+                    .collection("settings")
+                    .document("app_settings")
+                    .set(settings)
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore settings save queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during settings save: ${e.localizedMessage}")
+            }
         }
     }
 }

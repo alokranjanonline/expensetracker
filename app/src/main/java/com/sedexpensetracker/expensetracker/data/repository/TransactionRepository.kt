@@ -31,7 +31,8 @@ class TransactionRepository {
                     .collection("transactions")
                     .addSnapshotListener { snapshot, error ->
                         if (error != null) {
-                            Log.e("ExpenseTracker", "Firestore transactions listen error: ${error.localizedMessage}", error)
+                            Log.w("ExpenseTracker", "Firestore transactions listen offline warning: ${error.localizedMessage}")
+                            trySend(localList.toList())
                             return@addSnapshotListener
                         }
                         if (snapshot != null) {
@@ -45,6 +46,7 @@ class TransactionRepository {
                     }
             } catch (e: Exception) {
                 Log.e("ExpenseTracker", "Error attaching transactions listener: ${e.localizedMessage}", e)
+                trySend(localList.toList())
             }
         }
 
@@ -74,10 +76,12 @@ class TransactionRepository {
         val user = auth.currentUser
         val uid = user?.uid
 
-        Log.d("ExpenseTracker", "saveTransaction called: uid=$uid, title=${tx.title}, amount=${tx.amountMinorUnits}")
-
         if (tx.id.isBlank()) {
-            tx.id = firestore.collection("users").document().id
+            tx.id = try {
+                firestore.collection("users").document().id
+            } catch (e: Exception) {
+                "tx_${System.currentTimeMillis()}_${(100..999).random()}"
+            }
         }
 
         val existingIndex = localList.indexOfFirst { it.id == tx.id }
@@ -89,25 +93,26 @@ class TransactionRepository {
         localList.sortByDescending { it.dateTimeEpochMillis }
         _localTransactionsFlow.value = localList.toList()
 
-        if (uid.isNullOrBlank()) {
-            Log.e("ExpenseTracker", "Cannot save transaction to Firestore: Auth currentUser UID is null!")
-            onComplete?.invoke(false, "User is not authenticated.")
-            return
-        }
+        // Invoke completion immediately so local UI updates without waiting on network
+        onComplete?.invoke(true, null)
 
-        firestore.collection("users")
-            .document(uid)
-            .collection("transactions")
-            .document(tx.id)
-            .set(tx)
-            .addOnSuccessListener {
-                Log.d("ExpenseTracker", "Firestore transaction write SUCCESS! Document path: users/$uid/transactions/${tx.id}")
-                onComplete?.invoke(true, null)
+        if (!uid.isNullOrBlank()) {
+            try {
+                firestore.collection("users")
+                    .document(uid)
+                    .collection("transactions")
+                    .document(tx.id)
+                    .set(tx)
+                    .addOnSuccessListener {
+                        Log.d("ExpenseTracker", "Firestore transaction write SUCCESS! Document path: users/$uid/transactions/${tx.id}")
+                    }
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore transaction write queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during transaction save: ${e.localizedMessage}")
             }
-            .addOnFailureListener { error ->
-                Log.e("ExpenseTracker", "Firestore transaction write FAILED: ${error.localizedMessage}", error)
-                onComplete?.invoke(false, error.localizedMessage)
-            }
+        }
     }
 
     fun deleteTransaction(tx: TransactionModel, onComplete: ((Boolean, String?) -> Unit)? = null) {
@@ -115,19 +120,20 @@ class TransactionRepository {
 
         localList.removeAll { it.id == tx.id }
         _localTransactionsFlow.value = localList.toList()
+        onComplete?.invoke(true, null)
 
         if (!uid.isNullOrBlank() && tx.id.isNotBlank()) {
-            firestore.collection("users").document(uid).collection("transactions").document(tx.id).delete()
-                .addOnSuccessListener {
-                    Log.d("ExpenseTracker", "Firestore transaction delete SUCCESS! Document ID: ${tx.id}")
-                    onComplete?.invoke(true, null)
-                }
-                .addOnFailureListener { error ->
-                    Log.e("ExpenseTracker", "Firestore transaction delete FAILED: ${error.localizedMessage}", error)
-                    onComplete?.invoke(false, error.localizedMessage)
-                }
-        } else {
-            onComplete?.invoke(true, null)
+            try {
+                firestore.collection("users").document(uid).collection("transactions").document(tx.id).delete()
+                    .addOnSuccessListener {
+                        Log.d("ExpenseTracker", "Firestore transaction delete SUCCESS!")
+                    }
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore transaction delete queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during transaction delete: ${e.localizedMessage}")
+            }
         }
     }
 
@@ -135,30 +141,30 @@ class TransactionRepository {
         val uid = auth.currentUser?.uid
         localList.clear()
         _localTransactionsFlow.value = emptyList()
+        onComplete?.invoke(true, null)
 
         if (!uid.isNullOrBlank()) {
-            firestore.collection("users").document(uid).collection("transactions").get()
-                .addOnSuccessListener { snapshot ->
-                    val batch = firestore.batch()
-                    for (doc in snapshot.documents) {
-                        batch.delete(doc.reference)
+            try {
+                firestore.collection("users").document(uid).collection("transactions").get()
+                    .addOnSuccessListener { snapshot ->
+                        val batch = firestore.batch()
+                        for (doc in snapshot.documents) {
+                            batch.delete(doc.reference)
+                        }
+                        batch.commit()
+                            .addOnSuccessListener {
+                                Log.d("ExpenseTracker", "Firestore clearAll SUCCESS!")
+                            }
+                            .addOnFailureListener { error ->
+                                Log.w("ExpenseTracker", "Firestore clearAll queued offline: ${error.localizedMessage}")
+                            }
                     }
-                    batch.commit()
-                        .addOnSuccessListener {
-                            Log.d("ExpenseTracker", "Firestore clearAll SUCCESS!")
-                            onComplete?.invoke(true, null)
-                        }
-                        .addOnFailureListener { error ->
-                            Log.e("ExpenseTracker", "Firestore clearAll FAILED: ${error.localizedMessage}", error)
-                            onComplete?.invoke(false, error.localizedMessage)
-                        }
-                }
-                .addOnFailureListener { error ->
-                    Log.e("ExpenseTracker", "Firestore clearAll query FAILED: ${error.localizedMessage}", error)
-                    onComplete?.invoke(false, error.localizedMessage)
-                }
-        } else {
-            onComplete?.invoke(true, null)
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore clearAll query offline warning: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during clearAll: ${e.localizedMessage}")
+            }
         }
     }
 }

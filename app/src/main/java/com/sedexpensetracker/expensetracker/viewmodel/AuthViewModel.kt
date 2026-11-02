@@ -1,5 +1,8 @@
 package com.sedexpensetracker.expensetracker.viewmodel
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sedexpensetracker.expensetracker.data.repository.AuthRepository
@@ -23,13 +26,37 @@ data class AuthUiState(
     val userEmail: String = ""
 )
 
-class AuthViewModel(private val authRepository: AuthRepository = AuthRepository()) : ViewModel() {
+class AuthViewModel(
+    context: Context,
+    private val authRepository: AuthRepository = AuthRepository()
+) : ViewModel() {
 
+    private val appContext = context.applicationContext
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
     init {
         checkAuthStatus()
+    }
+
+    private fun isOnline(): Boolean {
+        return try {
+            val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+            val network = cm.activeNetwork ?: return false
+            val capabilities = cm.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (e: Exception) {
+            true
+        }
+    }
+
+    private fun formatErrorMessage(rawError: String?): String {
+        val err = rawError?.lowercase() ?: ""
+        if (err.contains("network") || err.contains("connection") || err.contains("offline") ||
+            err.contains("unreachable") || err.contains("interrupted") || err.contains("host") || err.contains("a network error")) {
+            return "No active internet connection. Please connect to the internet and try again."
+        }
+        return rawError ?: "An unexpected error occurred. Please try again."
     }
 
     fun checkAuthStatus() {
@@ -83,6 +110,14 @@ class AuthViewModel(private val authRepository: AuthRepository = AuthRepository(
             return
         }
 
+        if (!isOnline()) {
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                errorMessage = "No active internet connection. Please connect to the internet and try again."
+            )
+            return
+        }
+
         _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
         viewModelScope.launch {
             val result = authRepository.loginUser(email, password)
@@ -97,7 +132,7 @@ class AuthViewModel(private val authRepository: AuthRepository = AuthRepository(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = error.localizedMessage ?: "Login failed."
+                    errorMessage = formatErrorMessage(error.localizedMessage)
                 )
             }
         }
@@ -125,6 +160,14 @@ class AuthViewModel(private val authRepository: AuthRepository = AuthRepository(
             return
         }
 
+        if (!isOnline()) {
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                errorMessage = "No active internet connection. Please connect to the internet and try again."
+            )
+            return
+        }
+
         _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
         viewModelScope.launch {
             val result = authRepository.registerUser(firstName, lastName, email, password)
@@ -138,7 +181,7 @@ class AuthViewModel(private val authRepository: AuthRepository = AuthRepository(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = error.localizedMessage ?: "Registration failed."
+                    errorMessage = formatErrorMessage(error.localizedMessage)
                 )
             }
         }
@@ -148,6 +191,14 @@ class AuthViewModel(private val authRepository: AuthRepository = AuthRepository(
         val email = _uiState.value.email.trim()
         if (email.isBlank()) {
             _uiState.value = _uiState.value.copy(errorMessage = "Please enter your registered email.")
+            return
+        }
+
+        if (!isOnline()) {
+            _uiState.value = _uiState.value.copy(
+                isLoading = false,
+                errorMessage = "No active internet connection. Please connect to the internet and try again."
+            )
             return
         }
 
@@ -162,7 +213,7 @@ class AuthViewModel(private val authRepository: AuthRepository = AuthRepository(
             }.onFailure { error ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    errorMessage = error.localizedMessage ?: "Failed to send reset link."
+                    errorMessage = formatErrorMessage(error.localizedMessage)
                 )
             }
         }

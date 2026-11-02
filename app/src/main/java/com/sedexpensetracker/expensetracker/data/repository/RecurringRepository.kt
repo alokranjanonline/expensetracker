@@ -1,5 +1,6 @@
 package com.sedexpensetracker.expensetracker.data.repository
 
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -31,6 +32,11 @@ class RecurringRepository(private val transactionRepository: TransactionReposito
                     .document(uid)
                     .collection("recurring_transactions")
                     .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.w("ExpenseTracker", "Firestore recurring listen offline warning: ${error.localizedMessage}")
+                            trySend(localRecurring.toList())
+                            return@addSnapshotListener
+                        }
                         if (snapshot != null) {
                             val list = snapshot.toObjects(RecurringTransactionModel::class.java)
                             localRecurring.clear()
@@ -40,7 +46,8 @@ class RecurringRepository(private val transactionRepository: TransactionReposito
                         }
                     }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("ExpenseTracker", "Error attaching recurring listener: ${e.localizedMessage}", e)
+                trySend(localRecurring.toList())
             }
         }
 
@@ -70,7 +77,11 @@ class RecurringRepository(private val transactionRepository: TransactionReposito
         val uid = auth.currentUser?.uid
 
         if (item.id.isBlank()) {
-            item.id = firestore.collection("users").document().id
+            item.id = try {
+                firestore.collection("users").document().id
+            } catch (e: Exception) {
+                "rec_${System.currentTimeMillis()}_${(100..999).random()}"
+            }
         }
 
         val index = localRecurring.indexOfFirst { it.id == item.id }
@@ -81,12 +92,17 @@ class RecurringRepository(private val transactionRepository: TransactionReposito
         }
         _localRecurringFlow.value = localRecurring.toList()
 
-        if (uid != null) {
-            firestore.collection("users").document(uid).collection("recurring_transactions").document(item.id).set(item)
-                .addOnSuccessListener { onComplete?.invoke(true, null) }
-                .addOnFailureListener { error -> onComplete?.invoke(false, error.localizedMessage) }
-        } else {
-            onComplete?.invoke(true, null)
+        onComplete?.invoke(true, null)
+
+        if (!uid.isNullOrBlank()) {
+            try {
+                firestore.collection("users").document(uid).collection("recurring_transactions").document(item.id).set(item)
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore recurring save queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during recurring save: ${e.localizedMessage}")
+            }
         }
 
         return item.id
@@ -98,13 +114,17 @@ class RecurringRepository(private val transactionRepository: TransactionReposito
         localRecurring.removeAll { it.id == item.id }
         _localRecurringFlow.value = localRecurring.toList()
 
-        if (uid != null && item.id.isNotBlank()) {
-            firestore.collection("users").document(uid).collection("recurring_transactions").document(item.id).delete()
-                .addOnCompleteListener { task ->
-                    onComplete?.invoke(task.isSuccessful, task.exception?.localizedMessage)
-                }
-        } else {
-            onComplete?.invoke(true, null)
+        onComplete?.invoke(true, null)
+
+        if (!uid.isNullOrBlank() && item.id.isNotBlank()) {
+            try {
+                firestore.collection("users").document(uid).collection("recurring_transactions").document(item.id).delete()
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore recurring delete queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during recurring delete: ${e.localizedMessage}")
+            }
         }
     }
 

@@ -18,7 +18,7 @@ class AppViewModelFactory(private val context: Context) : ViewModelProvider.Fact
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(AuthViewModel::class.java) -> {
-                AuthViewModel(authRepository) as T
+                AuthViewModel(context, authRepository) as T
             }
             modelClass.isAssignableFrom(HomeViewModel::class.java) -> {
                 HomeViewModel(transactionRepository, budgetRepository, settingsRepository) as T

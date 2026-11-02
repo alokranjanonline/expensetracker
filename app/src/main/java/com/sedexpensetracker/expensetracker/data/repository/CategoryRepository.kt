@@ -1,5 +1,6 @@
 package com.sedexpensetracker.expensetracker.data.repository
 
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -29,13 +30,17 @@ class CategoryRepository {
                     .document(uid)
                     .collection("categories")
                     .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.w("ExpenseTracker", "Firestore categories listen offline warning: ${error.localizedMessage}")
+                            trySend(localCategories.toList())
+                            return@addSnapshotListener
+                        }
                         if (snapshot != null) {
                             val list = snapshot.toObjects(CategoryModel::class.java)
                             if (list.isEmpty()) {
                                 seedDefaultCategories(uid)
-                                trySend(getFreshDefaultCategories())
+                                trySend(localCategories.toList())
                             } else {
-                                // Deduplicate categories by type and name
                                 val uniqueList = list.distinctBy { "${it.type.uppercase()}_${it.name.trim().uppercase()}" }.toMutableList()
                                 uniqueList.sortBy { it.name }
                                 localCategories.clear()
@@ -46,7 +51,8 @@ class CategoryRepository {
                         }
                     }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("ExpenseTracker", "Error attaching categories listener: ${e.localizedMessage}", e)
+                trySend(localCategories.toList())
             }
         }
 
@@ -73,22 +79,32 @@ class CategoryRepository {
     }
 
     private fun seedDefaultCategories(uid: String) {
-        val batch = firestore.batch()
-        for (category in getFreshDefaultCategories()) {
-            val docRef = firestore.collection("users").document(uid).collection("categories").document(category.id)
-            batch.set(docRef, category)
+        try {
+            val batch = firestore.batch()
+            for (category in getFreshDefaultCategories()) {
+                val docRef = firestore.collection("users").document(uid).collection("categories").document(category.id)
+                batch.set(docRef, category)
+            }
+            batch.commit()
+                .addOnFailureListener { err ->
+                    Log.w("ExpenseTracker", "Default categories seed queued offline: ${err.localizedMessage}")
+                }
+        } catch (e: Exception) {
+            Log.w("ExpenseTracker", "Offline exception caught during seedDefaultCategories: ${e.localizedMessage}")
         }
-        batch.commit()
     }
 
     fun saveCategory(category: CategoryModel, onComplete: ((Boolean, String?) -> Unit)? = null): String {
         val uid = auth.currentUser?.uid
 
         if (category.id.isBlank()) {
-            category.id = firestore.collection("users").document().id
+            category.id = try {
+                firestore.collection("users").document().id
+            } catch (e: Exception) {
+                "cat_${System.currentTimeMillis()}_${(100..999).random()}"
+            }
         }
 
-        // Check if a category with same type and name already exists
         val existingIndex = localCategories.indexOfFirst {
             it.id == category.id || (it.type.equals(category.type, ignoreCase = true) && it.name.trim().equals(category.name.trim(), ignoreCase = true))
         }
@@ -101,12 +117,17 @@ class CategoryRepository {
         localCategories.sortBy { it.name }
         _localCategoriesFlow.value = localCategories.toList()
 
-        if (uid != null) {
-            firestore.collection("users").document(uid).collection("categories").document(category.id).set(category)
-                .addOnSuccessListener { onComplete?.invoke(true, null) }
-                .addOnFailureListener { error -> onComplete?.invoke(false, error.localizedMessage) }
-        } else {
-            onComplete?.invoke(true, null)
+        onComplete?.invoke(true, null)
+
+        if (!uid.isNullOrBlank()) {
+            try {
+                firestore.collection("users").document(uid).collection("categories").document(category.id).set(category)
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore category save queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during category save: ${e.localizedMessage}")
+            }
         }
 
         return category.id
@@ -118,13 +139,17 @@ class CategoryRepository {
         localCategories.removeAll { it.id == category.id }
         _localCategoriesFlow.value = localCategories.toList()
 
-        if (uid != null && category.id.isNotBlank()) {
-            firestore.collection("users").document(uid).collection("categories").document(category.id).delete()
-                .addOnCompleteListener { task ->
-                    onComplete?.invoke(task.isSuccessful, task.exception?.localizedMessage)
-                }
-        } else {
-            onComplete?.invoke(true, null)
+        onComplete?.invoke(true, null)
+
+        if (!uid.isNullOrBlank() && category.id.isNotBlank()) {
+            try {
+                firestore.collection("users").document(uid).collection("categories").document(category.id).delete()
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore category delete queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during category delete: ${e.localizedMessage}")
+            }
         }
     }
 

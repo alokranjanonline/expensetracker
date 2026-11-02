@@ -1,5 +1,6 @@
 package com.sedexpensetracker.expensetracker.data.repository
 
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -29,6 +30,11 @@ class BudgetRepository {
                     .document(uid)
                     .collection("budgets")
                     .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            Log.w("ExpenseTracker", "Firestore budgets listen offline warning: ${error.localizedMessage}")
+                            trySend(localBudgets.filter { it.yearMonth == yearMonth || yearMonth.isBlank() })
+                            return@addSnapshotListener
+                        }
                         if (snapshot != null) {
                             val list = snapshot.toObjects(BudgetModel::class.java)
                             localBudgets.clear()
@@ -38,7 +44,8 @@ class BudgetRepository {
                         }
                     }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("ExpenseTracker", "Error attaching budgets listener: ${e.localizedMessage}", e)
+                trySend(localBudgets.filter { it.yearMonth == yearMonth || yearMonth.isBlank() })
             }
         }
 
@@ -80,12 +87,17 @@ class BudgetRepository {
         }
         _localBudgetsFlow.value = localBudgets.toList()
 
-        if (uid != null) {
-            firestore.collection("users").document(uid).collection("budgets").document(budget.id).set(budget)
-                .addOnSuccessListener { onComplete?.invoke(true, null) }
-                .addOnFailureListener { error -> onComplete?.invoke(false, error.localizedMessage) }
-        } else {
-            onComplete?.invoke(true, null)
+        onComplete?.invoke(true, null)
+
+        if (!uid.isNullOrBlank()) {
+            try {
+                firestore.collection("users").document(uid).collection("budgets").document(budget.id).set(budget)
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore budget save queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during budget save: ${e.localizedMessage}")
+            }
         }
 
         return budget.id
@@ -97,13 +109,17 @@ class BudgetRepository {
         localBudgets.removeAll { it.id == budget.id }
         _localBudgetsFlow.value = localBudgets.toList()
 
-        if (uid != null && budget.id.isNotBlank()) {
-            firestore.collection("users").document(uid).collection("budgets").document(budget.id).delete()
-                .addOnCompleteListener { task ->
-                    onComplete?.invoke(task.isSuccessful, task.exception?.localizedMessage)
-                }
-        } else {
-            onComplete?.invoke(true, null)
+        onComplete?.invoke(true, null)
+
+        if (!uid.isNullOrBlank() && budget.id.isNotBlank()) {
+            try {
+                firestore.collection("users").document(uid).collection("budgets").document(budget.id).delete()
+                    .addOnFailureListener { error ->
+                        Log.w("ExpenseTracker", "Firestore budget delete queued offline: ${error.localizedMessage}")
+                    }
+            } catch (e: Exception) {
+                Log.w("ExpenseTracker", "Offline exception caught during budget delete: ${e.localizedMessage}")
+            }
         }
     }
 }
