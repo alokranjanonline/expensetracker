@@ -23,6 +23,6 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
     object CategoryManager : Screen("category_manager")
 
     companion object {
-        val bottomNavItems = listOf(Home, Transactions, Reports, Budgets, Settings)
+        val bottomNavItems: List<Screen> get() = listOf(Home, Transactions, Reports, Budgets, Settings)
     }
 }

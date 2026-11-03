@@ -41,6 +41,12 @@ fun AddEditTransactionScreen(
     val amountFocusRequester = remember { FocusRequester() }
     val titleFocusRequester = remember { FocusRequester() }
 
+    var expandedSuggestions by remember { mutableStateOf(false) }
+    val matchingSuggestions = remember(uiState.title, uiState.titleSuggestions) {
+        if (uiState.title.isBlank()) uiState.titleSuggestions
+        else uiState.titleSuggestions.filter { it.contains(uiState.title, ignoreCase = true) }
+    }
+
     LaunchedEffect(transactionId) {
         if (!transactionId.isNullOrBlank()) {
             viewModel.loadExistingTransaction(transactionId)
@@ -218,17 +224,42 @@ fun AddEditTransactionScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Title Input
-            OutlinedTextField(
-                value = uiState.title,
-                onValueChange = { viewModel.onTitleChange(it) },
-                label = { Text("Transaction Title") },
-                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(titleFocusRequester)
-            )
+            // Title Input with Auto-Suggestions (Alphabetical Order)
+            ExposedDropdownMenuBox(
+                expanded = expandedSuggestions && matchingSuggestions.isNotEmpty(),
+                onExpandedChange = { expandedSuggestions = it },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                OutlinedTextField(
+                    value = uiState.title,
+                    onValueChange = {
+                        viewModel.onTitleChange(it)
+                        expandedSuggestions = true
+                    },
+                    label = { Text("Transaction Title") },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                        .focusRequester(titleFocusRequester)
+                )
+
+                ExposedDropdownMenu(
+                    expanded = expandedSuggestions && matchingSuggestions.isNotEmpty(),
+                    onDismissRequest = { expandedSuggestions = false }
+                ) {
+                    matchingSuggestions.take(6).forEach { suggestion ->
+                        DropdownMenuItem(
+                            text = { Text(suggestion) },
+                            onClick = {
+                                viewModel.onTitleChange(suggestion)
+                                expandedSuggestions = false
+                            }
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 

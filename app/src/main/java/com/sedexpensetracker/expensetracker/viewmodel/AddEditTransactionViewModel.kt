@@ -31,6 +31,7 @@ data class AddEditTransactionUiState(
     val categories: List<CategoryModel> = emptyList(),
     val currencySymbol: String = "$",
     val dateFormat: String = "MMM dd, yyyy",
+    val titleSuggestions: List<String> = emptyList(),
     val errorMessage: String? = null,
     val focusTarget: FocusTarget = FocusTarget.NONE,
     val saveSuccess: Boolean = false,
@@ -64,16 +65,24 @@ class AddEditTransactionViewModel(
     val uiState: StateFlow<AddEditTransactionUiState> = combine(
         categoryRepository.allCategories,
         settingsRepository.settings,
+        transactionRepository.allTransactions,
         combine(_transactionType, _selectedCategoryId, _title, _amountText, ::InputsPart1),
-        combine(_dateTime, _notes, _paymentMethod, _isRecurring, ::InputsPart2),
-        combine(_recurrenceInterval, _errorMessage, _focusTarget, _saveSuccess, _isLoading, ::InputsPart3)
-    ) { allCategories, settings, p1, p2, p3 ->
+        combine(_dateTime, _notes, _paymentMethod, _isRecurring, ::InputsPart2)
+    ) { allCategories, settings, allTx, p1, p2 ->
         val filtered = allCategories.filter { it.type == p1.type }
         val selCat = if (!p1.selCatId.isNullOrBlank()) {
             filtered.find { it.id == p1.selCatId } ?: filtered.firstOrNull()
         } else {
             filtered.firstOrNull()
         }
+
+        // Distinct title suggestions filtered by selected type (EXPENSE vs INCOME) in alphabetical order (A-Z)
+        val suggestions = allTx
+            .filter { it.type.equals(p1.type, ignoreCase = true) }
+            .map { it.title.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedBy { it.lowercase() }
 
         AddEditTransactionUiState(
             transactionId = _transactionId.value,
@@ -85,15 +94,26 @@ class AddEditTransactionViewModel(
             notes = p2.notes,
             paymentMethod = p2.paymentMethod,
             isRecurring = p2.isRecurring,
-            recurrenceInterval = p3.recurrenceInterval,
+            recurrenceInterval = _recurrenceInterval.value,
             categories = filtered,
             currencySymbol = settings.currencySymbol,
             dateFormat = settings.dateFormat,
-            errorMessage = p3.errorMessage,
-            focusTarget = p3.focusTarget,
-            saveSuccess = p3.saveSuccess,
-            isLoading = p3.isLoading
+            titleSuggestions = suggestions,
+            errorMessage = _errorMessage.value,
+            focusTarget = _focusTarget.value,
+            saveSuccess = _saveSuccess.value,
+            isLoading = _isLoading.value
         )
+    }.combine(_errorMessage) { state, err ->
+        state.copy(errorMessage = err)
+    }.combine(_focusTarget) { state, focus ->
+        state.copy(focusTarget = focus)
+    }.combine(_saveSuccess) { state, success ->
+        state.copy(saveSuccess = success)
+    }.combine(_isLoading) { state, loading ->
+        state.copy(isLoading = loading)
+    }.combine(_recurrenceInterval) { state, interval ->
+        state.copy(recurrenceInterval = interval)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -254,12 +274,4 @@ private data class InputsPart2(
     val notes: String,
     val paymentMethod: String,
     val isRecurring: Boolean
-)
-
-private data class InputsPart3(
-    val recurrenceInterval: String,
-    val errorMessage: String?,
-    val focusTarget: FocusTarget,
-    val saveSuccess: Boolean,
-    val isLoading: Boolean
 )

@@ -20,7 +20,9 @@ data class SettingsUiState(
     val isUserVerified: Boolean = false,
     val isExporting: Boolean = false,
     val infoMessage: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val actionResultMessage: String? = null,
+    val isActionSuccess: Boolean = true
 )
 
 class SettingsViewModel(
@@ -34,6 +36,8 @@ class SettingsViewModel(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     private val _infoMessage = MutableStateFlow<String?>(null)
+    private val _actionResultMessage = MutableStateFlow<String?>(null)
+    private val _isActionSuccess = MutableStateFlow(true)
 
     val uiState: StateFlow<SettingsUiState> = combine(
         settingsRepository.settings,
@@ -52,8 +56,14 @@ class SettingsViewModel(
             userEmail = user?.email ?: "local@expensetracker.app",
             isUserVerified = verified,
             infoMessage = info,
-            errorMessage = err
+            errorMessage = err,
+            actionResultMessage = _actionResultMessage.value,
+            isActionSuccess = _isActionSuccess.value
         )
+    }.combine(_actionResultMessage) { state, actionMsg ->
+        state.copy(actionResultMessage = actionMsg)
+    }.combine(_isActionSuccess) { state, isSuccess ->
+        state.copy(isActionSuccess = isSuccess)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -62,6 +72,10 @@ class SettingsViewModel(
 
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    fun clearActionResultMessage() {
+        _actionResultMessage.value = null
     }
 
     fun onThemeChange(themeMode: String) {
@@ -174,9 +188,11 @@ class SettingsViewModel(
                 uiState.value.settings.dateFormat
             )
             if (success) {
-                _infoMessage.value = "Transactions exported to CSV successfully!"
+                _isActionSuccess.value = true
+                _actionResultMessage.value = "Transactions exported to CSV successfully!"
             } else {
-                _errorMessage.value = "Failed to export CSV."
+                _isActionSuccess.value = false
+                _actionResultMessage.value = "Failed to export transactions to CSV."
             }
         }
     }
@@ -193,9 +209,11 @@ class SettingsViewModel(
                 context, uri, transactions, categories, budgets, recurring, settings
             )
             if (success) {
-                _infoMessage.value = "Backup created successfully!"
+                _isActionSuccess.value = true
+                _actionResultMessage.value = "Backup file created successfully!"
             } else {
-                _errorMessage.value = "Failed to create backup file."
+                _isActionSuccess.value = false
+                _actionResultMessage.value = "Failed to create backup file."
             }
         }
     }
@@ -206,9 +224,11 @@ class SettingsViewModel(
                 context, uri, transactionRepository, categoryRepository, budgetRepository, recurringRepository, settingsRepository
             )
             result.onSuccess {
-                _infoMessage.value = "Data restored successfully!"
+                _isActionSuccess.value = true
+                _actionResultMessage.value = "Data restored successfully from backup file!"
             }.onFailure { error ->
-                _errorMessage.value = error.localizedMessage ?: "Failed to restore data."
+                _isActionSuccess.value = false
+                _actionResultMessage.value = "Failed to restore data: ${error.localizedMessage}"
             }
         }
     }
@@ -216,7 +236,29 @@ class SettingsViewModel(
     fun clearAllData() {
         viewModelScope.launch {
             transactionRepository.clearAll()
-            _infoMessage.value = "All transaction data cleared."
+            _isActionSuccess.value = true
+            _actionResultMessage.value = "All saved transaction records have been cleared."
+        }
+    }
+
+    fun deleteAccountData(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            transactionRepository.clearAll()
+            val userCategories = categoryRepository.allCategories.first().filter { it.isCustom }
+            for (cat in userCategories) {
+                categoryRepository.deleteCategory(cat)
+            }
+            val userBudgets = budgetRepository.getBudgetsForMonth("").first()
+            for (b in userBudgets) {
+                budgetRepository.deleteBudget(b)
+            }
+            val recurring = recurringRepository.allRecurringTransactions.first()
+            for (r in recurring) {
+                recurringRepository.deleteRecurringTransaction(r)
+            }
+            _isActionSuccess.value = true
+            _actionResultMessage.value = "Your account data has been wiped successfully."
+            onComplete()
         }
     }
 

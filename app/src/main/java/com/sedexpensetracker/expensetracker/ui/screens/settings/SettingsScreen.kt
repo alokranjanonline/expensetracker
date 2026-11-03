@@ -34,6 +34,7 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     var showClearDataDialog by remember { mutableStateOf(false) }
+    var showDeleteAccountDataDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showDateFormatDialog by remember { mutableStateOf(false) }
@@ -73,6 +74,33 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+
+            // Action Result Success/Failure Feedback Dialog (Requirement #2)
+            uiState.actionResultMessage?.let { msg ->
+                AlertDialog(
+                    onDismissRequest = { viewModel.clearActionResultMessage() },
+                    icon = {
+                        Icon(
+                            imageVector = if (uiState.isActionSuccess) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (uiState.isActionSuccess) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(44.dp)
+                        )
+                    },
+                    title = { Text(if (uiState.isActionSuccess) "Success" else "Action Failed", fontWeight = FontWeight.Bold) },
+                    text = { Text(msg) },
+                    confirmButton = {
+                        Button(
+                            onClick = { viewModel.clearActionResultMessage() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (uiState.isActionSuccess) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("OK", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+            }
 
             // Profile Card
             Card(
@@ -265,7 +293,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Privacy & Clear Data
+            // Account & Data Wipe Section (Requirement #3)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
@@ -284,10 +312,48 @@ fun SettingsScreen(
                         leadingContent = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                         modifier = Modifier.clickable { showClearDataDialog = true }
                     )
+                    HorizontalDivider()
+                    ListItem(
+                        headlineContent = { Text("Delete Account Data", color = MaterialTheme.colorScheme.error) },
+                        supportingContent = { Text("Wipe all saved data while keeping your user registration") },
+                        leadingContent = { Icon(Icons.Default.PersonRemove, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        modifier = Modifier.clickable { showDeleteAccountDataDialog = true }
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Delete Account Data Dialog (Requirement #3)
+        if (showDeleteAccountDataDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteAccountDataDialog = false },
+                icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp)) },
+                title = { Text("Delete Account Data?", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text("Are you sure you want to delete all your account data? This will permanently wipe your transactions, categories, budgets, and settings while keeping your email registration intact.", color = MaterialTheme.colorScheme.error)
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteAccountDataDialog = false
+                            viewModel.deleteAccountData {
+                                viewModel.logout()
+                                onLogout()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete Data & Log Out", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteAccountDataDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         // Sample CSV Format Dialog
