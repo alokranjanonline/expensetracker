@@ -75,7 +75,7 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // Action Result Success/Failure Feedback Dialog (Requirement #2)
+            // Action Result Success/Failure Feedback Dialog
             uiState.actionResultMessage?.let { msg ->
                 AlertDialog(
                     onDismissRequest = { viewModel.clearActionResultMessage() },
@@ -293,7 +293,7 @@ fun SettingsScreen(
                 }
             }
 
-            // Account & Data Wipe Section (Requirement #3)
+            // Account Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
@@ -314,8 +314,8 @@ fun SettingsScreen(
                     )
                     HorizontalDivider()
                     ListItem(
-                        headlineContent = { Text("Delete Account Data", color = MaterialTheme.colorScheme.error) },
-                        supportingContent = { Text("Wipe all saved data while keeping your user registration") },
+                        headlineContent = { Text("Delete account", color = MaterialTheme.colorScheme.error) },
+                        supportingContent = { Text("Your account and its all data will be deleted.") },
                         leadingContent = { Icon(Icons.Default.PersonRemove, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
                         modifier = Modifier.clickable { showDeleteAccountDataDialog = true }
                     )
@@ -325,14 +325,14 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Delete Account Data Dialog (Requirement #3)
+        // Delete Account Dialog
         if (showDeleteAccountDataDialog) {
             AlertDialog(
                 onDismissRequest = { showDeleteAccountDataDialog = false },
                 icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp)) },
-                title = { Text("Delete Account Data?", fontWeight = FontWeight.Bold) },
+                title = { Text("Delete account", fontWeight = FontWeight.Bold) },
                 text = {
-                    Text("Are you sure you want to delete all your account data? This will permanently wipe your transactions, categories, budgets, and settings while keeping your email registration intact.", color = MaterialTheme.colorScheme.error)
+                    Text("Your account and its all data will be deleted.", color = MaterialTheme.colorScheme.error)
                 },
                 confirmButton = {
                     Button(
@@ -345,7 +345,7 @@ fun SettingsScreen(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("Delete Data & Log Out", fontWeight = FontWeight.Bold)
+                        Text("Delete account", fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
