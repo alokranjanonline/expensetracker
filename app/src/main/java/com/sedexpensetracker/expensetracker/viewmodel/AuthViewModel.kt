@@ -122,11 +122,13 @@ class AuthViewModel(
         viewModelScope.launch {
             val result = authRepository.loginUser(email, password)
             result.onSuccess { user ->
+                val name = user.displayName ?: "User"
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isLoggedIn = true,
-                    userDisplayName = user.displayName ?: "User",
+                    userDisplayName = name,
                     userEmail = user.email ?: "",
+                    infoMessage = "Login successful! Welcome back, $name.",
                     errorMessage = null
                 )
             }.onFailure { error ->
