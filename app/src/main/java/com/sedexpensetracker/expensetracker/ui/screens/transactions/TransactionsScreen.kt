@@ -78,7 +78,7 @@ fun TransactionsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // ORDER: Expense, Income, All (as requested in requirement #2)
+            // ORDER: Expense, Income, All
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -209,11 +209,13 @@ fun TransactionsScreen(
                                         { _, year, month, dayOfMonth ->
                                             val startCal = Calendar.getInstance().apply {
                                                 set(year, month, dayOfMonth, 0, 0, 0)
+                                                set(Calendar.MILLISECOND, 0)
                                             }
                                             tempStartMillis = startCal.timeInMillis
                                             if (tempEndMillis == null || tempEndMillis!! < startCal.timeInMillis) {
                                                 val endCal = Calendar.getInstance().apply {
                                                     set(year, month, dayOfMonth, 23, 59, 59)
+                                                    set(Calendar.MILLISECOND, 999)
                                                 }
                                                 tempEndMillis = endCal.timeInMillis
                                             }
@@ -250,6 +252,7 @@ fun TransactionsScreen(
                                         { _, year, month, dayOfMonth ->
                                             val endCal = Calendar.getInstance().apply {
                                                 set(year, month, dayOfMonth, 23, 59, 59)
+                                                set(Calendar.MILLISECOND, 999)
                                             }
                                             tempEndMillis = endCal.timeInMillis
                                         },
@@ -275,9 +278,21 @@ fun TransactionsScreen(
                     Button(
                         onClick = {
                             if (tempStartMillis != null) {
-                                val start = tempStartMillis!!
-                                val end = tempEndMillis ?: start
-                                viewModel.onDateRangeChange(start, end)
+                                val startCal = Calendar.getInstance().apply {
+                                    timeInMillis = tempStartMillis!!
+                                    set(Calendar.HOUR_OF_DAY, 0)
+                                    set(Calendar.MINUTE, 0)
+                                    set(Calendar.SECOND, 0)
+                                    set(Calendar.MILLISECOND, 0)
+                                }
+                                val endCal = Calendar.getInstance().apply {
+                                    timeInMillis = tempEndMillis ?: tempStartMillis!!
+                                    set(Calendar.HOUR_OF_DAY, 23)
+                                    set(Calendar.MINUTE, 59)
+                                    set(Calendar.SECOND, 59)
+                                    set(Calendar.MILLISECOND, 999)
+                                }
+                                viewModel.onDateRangeChange(startCal.timeInMillis, endCal.timeInMillis)
                             }
                             showDateRangeDialog = false
                         }
@@ -330,7 +345,7 @@ fun TransactionsScreen(
             )
         }
 
-        // Delete Confirmation Dialog (Requirement #1)
+        // Delete Confirmation Dialog
         deletingTransaction?.let { txToDelete ->
             AlertDialog(
                 onDismissRequest = { deletingTransaction = null },

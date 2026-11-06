@@ -17,8 +17,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sedexpensetracker.expensetracker.ui.components.CategoryIconHelper
@@ -47,12 +49,26 @@ fun AddEditTransactionScreen(
         else uiState.titleSuggestions.filter { it.contains(uiState.title, ignoreCase = true) }
     }
 
-    LaunchedEffect(transactionId) {
-        if (!transactionId.isNullOrBlank()) {
-            viewModel.loadExistingTransaction(transactionId)
-        } else if (initialType.isNotBlank()) {
-            viewModel.onTypeChange(initialType)
+    var titleTextFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = uiState.title,
+                selection = TextRange(uiState.title.length)
+            )
+        )
+    }
+
+    LaunchedEffect(uiState.title) {
+        if (titleTextFieldValue.text != uiState.title) {
+            titleTextFieldValue = TextFieldValue(
+                text = uiState.title,
+                selection = TextRange(uiState.title.length)
+            )
         }
+    }
+
+    LaunchedEffect(transactionId, initialType) {
+        viewModel.resetState(initialType = initialType, transactionId = transactionId)
     }
 
     LaunchedEffect(uiState.errorMessage) {
@@ -224,16 +240,17 @@ fun AddEditTransactionScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Title Input with Auto-Suggestions (Alphabetical Order)
+            // Title Input with Auto-Suggestions (Alphabetical Order + End of Text Cursor)
             ExposedDropdownMenuBox(
                 expanded = expandedSuggestions && matchingSuggestions.isNotEmpty(),
                 onExpandedChange = { expandedSuggestions = it },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 OutlinedTextField(
-                    value = uiState.title,
-                    onValueChange = {
-                        viewModel.onTitleChange(it)
+                    value = titleTextFieldValue,
+                    onValueChange = { newValue ->
+                        titleTextFieldValue = newValue
+                        viewModel.onTitleChange(newValue.text)
                         expandedSuggestions = true
                     },
                     label = { Text("Transaction Title") },
@@ -254,6 +271,10 @@ fun AddEditTransactionScreen(
                             text = { Text(suggestion) },
                             onClick = {
                                 viewModel.onTitleChange(suggestion)
+                                titleTextFieldValue = TextFieldValue(
+                                    text = suggestion,
+                                    selection = TextRange(suggestion.length)
+                                )
                                 expandedSuggestions = false
                             }
                         )

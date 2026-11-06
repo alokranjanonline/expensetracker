@@ -1,5 +1,8 @@
 package com.sedexpensetracker.expensetracker.ui.navigation
 
+import android.app.Activity
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -95,8 +98,29 @@ fun ExpenseTrackerApp() {
 
             val pagerState = rememberPagerState(initialPage = 0, pageCount = { mainTabScreens.size })
             val coroutineScope = rememberCoroutineScope()
+            var backPressedTime by remember { mutableLongStateOf(0L) }
 
             val isMainTabRoute = currentRoute == "main_tabs" || currentRoute == null || Screen.bottomNavItems.any { it.route == currentRoute }
+
+            if (isMainTabRoute) {
+                BackHandler(enabled = true) {
+                    if (pagerState.currentPage != 0) {
+                        // Return to Home tab first if on any other tab
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(0)
+                        }
+                    } else {
+                        // Double press back to exit app from Home tab
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - backPressedTime < 2000L) {
+                            (context as? Activity)?.finish()
+                        } else {
+                            backPressedTime = currentTime
+                            Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
 
             Scaffold(
                 bottomBar = {
@@ -218,7 +242,10 @@ fun ExpenseTrackerApp() {
                             val txId = if (txIdArg.isNullOrBlank()) null else txIdArg
                             val initialType = backStackEntry.arguments?.getString("initialType") ?: "EXPENSE"
 
-                            val addEditViewModel: AddEditTransactionViewModel = viewModel(factory = factory)
+                            val addEditViewModel: AddEditTransactionViewModel = viewModel(
+                                viewModelStoreOwner = backStackEntry,
+                                factory = factory
+                            )
 
                             AddEditTransactionScreen(
                                 viewModel = addEditViewModel,
@@ -228,9 +255,13 @@ fun ExpenseTrackerApp() {
                             )
                         }
 
-                        composable(Screen.CategoryManager.route) {
+                        composable(Screen.CategoryManager.route) { backStackEntry ->
+                            val categoryManagerViewModel: SettingsViewModel = viewModel(
+                                viewModelStoreOwner = backStackEntry,
+                                factory = factory
+                            )
                             CategoryManagerScreen(
-                                viewModel = settingsViewModel,
+                                viewModel = categoryManagerViewModel,
                                 onNavigateBack = { mainNavController.popBackStack() }
                             )
                         }

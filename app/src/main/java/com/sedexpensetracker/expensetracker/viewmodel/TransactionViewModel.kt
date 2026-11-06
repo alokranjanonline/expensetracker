@@ -8,6 +8,7 @@ import com.sedexpensetracker.expensetracker.data.repository.TransactionRepositor
 import com.sedexpensetracker.expensetracker.utilities.CurrencyFormatter
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 enum class SortOption { NEWEST, OLDEST, HIGHEST_AMOUNT, LOWEST_AMOUNT }
 
@@ -80,12 +81,28 @@ class TransactionViewModel(
             filtered = filtered.filter { it.paymentMethod == five.paymentMethod }
         }
 
-        // Date Range Filter
+        // Start Date Filter (00:00:00.000 of Start Date)
         if (four.start != null) {
-            filtered = filtered.filter { it.dateTimeEpochMillis >= four.start }
+            val startOfDay = Calendar.getInstance().apply {
+                timeInMillis = four.start
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            filtered = filtered.filter { it.dateTimeEpochMillis >= startOfDay }
         }
+
+        // End Date Filter (23:59:59.999 of End Date)
         if (four.end != null) {
-            filtered = filtered.filter { it.dateTimeEpochMillis <= four.end }
+            val endOfDay = Calendar.getInstance().apply {
+                timeInMillis = four.end
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
+            }.timeInMillis
+            filtered = filtered.filter { it.dateTimeEpochMillis <= endOfDay }
         }
 
         // Sorting

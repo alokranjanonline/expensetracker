@@ -120,6 +120,26 @@ class AddEditTransactionViewModel(
         initialValue = AddEditTransactionUiState()
     )
 
+    fun resetState(initialType: String = "EXPENSE", transactionId: String? = null) {
+        _saveSuccess.value = false
+        _isLoading.value = false
+        _errorMessage.value = null
+        _focusTarget.value = FocusTarget.NONE
+        _title.value = ""
+        _amountText.value = ""
+        _notes.value = ""
+        _paymentMethod.value = "Cash"
+        _isRecurring.value = false
+        _recurrenceInterval.value = "MONTHLY"
+        _transactionType.value = initialType
+        _selectedCategoryId.value = null
+        _transactionId.value = transactionId
+        _dateTime.value = System.currentTimeMillis()
+        if (!transactionId.isNullOrBlank()) {
+            loadExistingTransaction(transactionId)
+        }
+    }
+
     fun loadExistingTransaction(transactionId: String) {
         viewModelScope.launch {
             transactionRepository.allTransactions.first().find { it.id == transactionId }?.let { tx ->
